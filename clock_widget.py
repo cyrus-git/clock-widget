@@ -1,9 +1,12 @@
 import objc
-from AppKit import NSWindowCollectionBehaviorCanJoinAllSpaces  # 追加
-from AppKit import (NSApp, NSApplication, NSBackingStoreBuffered, NSColor,
-                    NSFont, NSObject, NSRunningApplication, NSScreen,
-                    NSTextField, NSWindow, NSWindowStyleMaskBorderless)
-from Foundation import NSDate, NSDateFormatter, NSTimer, NSTimeZone
+from AppKit import (NSApp, NSApplication,
+                    NSApplicationDidChangeScreenParametersNotification,
+                    NSBackingStoreBuffered, NSColor, NSFont, NSObject,
+                    NSRunningApplication, NSScreen, NSTextField, NSWindow,
+                    NSWindowCollectionBehaviorCanJoinAllSpaces,
+                    NSWindowStyleMaskBorderless)
+from Foundation import (NSDate, NSDateFormatter, NSNotificationCenter, NSTimer,
+                        NSTimeZone)
 from PyObjCTools import AppHelper
 from Quartz import kCGDesktopIconWindowLevel
 
@@ -13,34 +16,56 @@ class AppDelegate(NSObject):
         return True
 
 
-class ClockWindow:
-    def __init__(self):
-        # ウィンドウのサイズと位置を設定
-        self.width = 900  # 幅を900に設定
-        self.height = 450  # 高さを450に設定
-        self.screen = NSScreen.mainScreen().frame()
+class ClockWindow(NSObject):
+    def init(self):
+        self = objc.super(ClockWindow, self).init()
+        if self is None:
+            return None
 
-        x = (self.screen.size.width - self.width) / 2
-        y = (self.screen.size.height - self.height) / 2
-        frame = ((x, y), (self.width, self.height))
+        # ウィンドウのサイズを設定
+        self.width = 900
+        self.height = 450
 
-        # NSWindowの初期化、スタイルマスクやウィンドウ設定を修正
+        # ウィンドウを初期化
         self.window = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
-            frame,
-            NSWindowStyleMaskBorderless,  # ウィンドウスタイルマスクをボーダーレスに設定
-            NSBackingStoreBuffered,        # バッキングストアの種類
-            False                          # ウィンドウ作成時にディレイしない
+            ((0, 0), (self.width, self.height)),
+            NSWindowStyleMaskBorderless,
+            NSBackingStoreBuffered,
+            False
         )
+
+        self.window.setLevel_(kCGDesktopIconWindowLevel)
+        self.window.setOpaque_(False)
+        self.window.setBackgroundColor_(NSColor.clearColor())
         self.window.setCollectionBehavior_(
             NSWindowCollectionBehaviorCanJoinAllSpaces)
 
-        # ウィンドウのレベルをデスクトップ上に設定
-        self.window.setLevel_(kCGDesktopIconWindowLevel)
+        # ラベルを設定
+        self.setup_labels()
 
-        # ウィンドウの背景色を透明に設定
-        self.window.setOpaque_(False)
-        self.window.setBackgroundColor_(NSColor.clearColor())
+        # ウィンドウを中央に配置
+        self.center_window()
 
+        # ウィンドウを表示
+        self.window.makeKeyAndOrderFront_(None)
+
+        # タイマーで時間を更新
+        self.update_time(None)
+        self.timer = NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
+            1.0, self, "update_time:", None, True
+        )
+
+        # スクリーン変更の通知を監視
+        NSNotificationCenter.defaultCenter().addObserver_selector_name_object_(
+            self,
+            "screenParametersChanged:",
+            NSApplicationDidChangeScreenParametersNotification,
+            None
+        )
+
+        return self
+
+    def setup_labels(self):
         # 1段目のラベル（曜日と日付）
         self.date_label = NSTextField.alloc().initWithFrame_(
             ((0, self.height / 2 - 40), (self.width, self.height / 2 - 50)))
@@ -67,17 +92,23 @@ class ClockWindow:
         self.time_label.setAlignment_(1)  # NSTextAlignmentCenter
         self.window.contentView().addSubview_(self.time_label)
 
-        # ウィンドウを常に表示
-        self.window.makeKeyAndOrderFront_(None)
-        self.update_time_(None)
+    def center_window(self):
+        # 現在のメインスクリーンを取得
+        self.screen = NSScreen.mainScreen().frame()
 
-        # タイマーで毎分時間を更新
-        self.timer = NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
-            1.0, self, "update_time:", None, True
-        )
-        NSApp.activateIgnoringOtherApps_(True)
+        # ウィンドウの位置を再計算
+        x = (self.screen.size.width - self.width) / 2
+        y = (self.screen.size.height - self.height) / 2
+        frame = ((x, y), (self.width, self.height))
 
-    def update_time_(self, timer):
+        # ウィンドウのフレームを更新
+        self.window.setFrame_display_(frame, True)
+
+    def screenParametersChanged_(self, notification):
+        # スクリーンが変更されたときにウィンドウを再配置
+        self.center_window()
+
+    def update_time(self, timer):
         # 日付を取得して1段目に表示
         date_formatter = NSDateFormatter.alloc().init()
         date_formatter.setDateFormat_("EEEE, MMM d")  # 曜日、月、日を表示
@@ -97,5 +128,5 @@ if __name__ == "__main__":
     app = NSApplication.sharedApplication()
     delegate = AppDelegate.alloc().init()
     app.setDelegate_(delegate)
-    clock_window = ClockWindow()
+    clock_window = ClockWindow.alloc().init()
     AppHelper.runEventLoop()
