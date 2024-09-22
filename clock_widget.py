@@ -1,3 +1,4 @@
+
 import objc
 from AppKit import (NSApp, NSApplication,
                     NSApplicationDidChangeScreenParametersNotification,
@@ -5,7 +6,7 @@ from AppKit import (NSApp, NSApplication,
                     NSRunningApplication, NSScreen, NSTextField, NSWindow,
                     NSWindowCollectionBehaviorCanJoinAllSpaces,
                     NSWindowStyleMaskBorderless)
-from Foundation import (NSDate, NSDateFormatter, NSNotificationCenter, NSTimer,
+from Foundation import (NSDate, NSDateFormatter, NSNotificationCenter,
                         NSTimeZone)
 from PyObjCTools import AppHelper
 from Quartz import kCGDesktopIconWindowLevel
@@ -49,11 +50,9 @@ class ClockWindow(NSObject):
         # ウィンドウを表示
         self.window.makeKeyAndOrderFront_(None)
 
-        # タイマーで時間を更新
-        self.update_time(None)
-        self.timer = NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
-            1.0, self, "update_time:", None, True
-        )
+        # タイマーを使わず手動で時間を更新
+        self.update_time()
+        self.schedule_update()
 
         # スクリーン変更の通知を監視
         NSNotificationCenter.defaultCenter().addObserver_selector_name_object_(
@@ -66,11 +65,10 @@ class ClockWindow(NSObject):
         return self
 
     def setup_labels(self):
-        # 1段目のラベル（曜日と日付）
+        # 日付ラベルを作成
         self.date_label = NSTextField.alloc().initWithFrame_(
             ((0, self.height / 2 - 40), (self.width, self.height / 2 - 50)))
-        self.date_label.setFont_(
-            NSFont.boldSystemFontOfSize_(60))  # フォントサイズを60に設定
+        self.date_label.setFont_(NSFont.boldSystemFontOfSize_(60))
         self.date_label.setTextColor_(NSColor.whiteColor())
         self.date_label.setBezeled_(False)
         self.date_label.setDrawsBackground_(False)
@@ -79,7 +77,7 @@ class ClockWindow(NSObject):
         self.date_label.setAlignment_(1)  # NSTextAlignmentCenter
         self.window.contentView().addSubview_(self.date_label)
 
-        # 2段目のラベル（時間）
+        # 時間ラベルを作成
         self.time_label = NSTextField.alloc().initWithFrame_(
             ((0, 100), (self.width, self.height / 2 - 30)))
         self.time_label.setFont_(
@@ -108,7 +106,7 @@ class ClockWindow(NSObject):
         # スクリーンが変更されたときにウィンドウを再配置
         self.center_window()
 
-    def update_time(self, timer):
+    def update_time(self):
         # 日付を取得して1段目に表示
         date_formatter = NSDateFormatter.alloc().init()
         date_formatter.setDateFormat_("EEEE, MMM d")  # 曜日、月、日を表示
@@ -122,6 +120,11 @@ class ClockWindow(NSObject):
         time_formatter.setTimeZone_(NSTimeZone.timeZoneWithName_("Asia/Tokyo"))
         current_time = time_formatter.stringFromDate_(NSDate.date())
         self.time_label.setStringValue_(current_time)
+
+    def schedule_update(self):
+        # 1秒後に次の時間更新を呼び出す
+        AppHelper.callLater(1.0, self.update_time)
+        AppHelper.callLater(1.0, self.schedule_update)
 
 
 if __name__ == "__main__":
